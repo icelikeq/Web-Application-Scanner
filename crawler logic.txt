@@ -1,0 +1,46 @@
+import requests
+import re
+from urllib.parse import urljoin
+from bs4 import BeautifulSoup
+
+class Crawler:
+    def __init__(self, base_url, session=None):
+        self.base_url = base_url
+        self.target_links = []
+        # Use an existing session if provided, otherwise create one
+        self.session = session if session else requests.Session()
+
+    def extract_links_from(self, url):
+        """Extracts href links from a specific URL."""
+        try:
+            response = self.session.get(url)
+            # Use regex to find hrefs, robust against some malformed HTML
+            return re.findall('(?:href=")(.*?)"', response.content.decode(errors="ignore"))
+        except requests.exceptions.RequestException:
+            return []
+
+    def crawl(self, url=None):
+        """Recursively crawls to find all sub-pages within the domain."""
+        if url is None:
+            url = self.base_url
+            print(f"[*] Starting crawl on {self.base_url}...")
+
+        try:
+            response = self.session.get(url)
+        except requests.exceptions.ConnectionError:
+            return
+
+        soup = BeautifulSoup(response.content, "html.parser")
+        href_links = soup.find_all("a", href=True)
+
+        for link in href_links:
+            href = link.get("href")
+            full_url = urljoin(url, href)
+
+            # Ensure we only crawl our target domain and avoid duplicates
+            if self.base_url in full_url and full_url not in self.target_links:
+                self.target_links.append(full_url)
+                print(f"[+] Discovered link: {full_url}")
+                self.crawl(full_url)
+        
+        return self.target_links
